@@ -9,3 +9,4 @@ litellm>=1.43.0,<1.60.0
 ollama==0.6.1
 uvicorn>=0.30.0
 pyautogen>=0.2.0
+requests>=2.32.0
