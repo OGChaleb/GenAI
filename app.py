@@ -10,6 +10,10 @@ import logging
 import asyncio
 import json
 import re
+import time
+import hashlib
+import io
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -47,10 +51,24 @@ logger = logging.getLogger(__name__)
 # -------------------------------------------------
 app = FastAPI(title="ProfessorGPT – Email RAG Agent System")
 
+# Simple in-memory dedup cache to avoid double-processing identical payloads
+DEDUP_TTL_SECONDS = 90
+REQUEST_CACHE: Dict[str, Dict[str, Any]] = {}
+LOG_EXPORT_DIR = Path(__file__).parent / "logs"
+
 # -------------------------------------------------
 # PDF INGESTION
 # -------------------------------------------------
-PDF_FOLDER = r"D:\GenAI\Haystack2"
+PDF_FOLDER = r"D:\GenAI\Haystack2\Haystack RAG"
+
+
+def export_request_logs(log_text: str) -> Path:
+    """Persist captured logs for a single request to a timestamped file."""
+    LOG_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+    file_path = LOG_EXPORT_DIR / f"request-log-{timestamp}.txt"
+    file_path.write_text(log_text, encoding="utf-8")
+    return file_path
 
 def split_text(text: str, size=600, overlap=120) -> List[str]:
     chunks = []
@@ -202,6 +220,21 @@ def extract_json_from_chat_history(chat_history: list, agent_name: str, is_array
     
     raise ValueError(f"No valid JSON found in chat history from agent {agent_name}")
 
+def is_terminated(chat_result, accept_json: bool = False) -> bool:
+    for msg in chat_result.chat_history:
+        content = msg.get("content", "")
+        if "TERMINATE" in content:
+            return True
+
+        if accept_json:
+            try:
+                json.loads(content)
+                return True
+            except Exception:
+                pass
+    return False
+
+
 def haystack_query(question: str) -> dict:
     """Retrieve documents and generate an answer using Haystack.
     Returns both the raw documents and the LLM answer."""
@@ -255,8 +288,8 @@ if LiteLLMProvider is not None:
 user_proxy = UserProxyAgent(
     name="Orchestrator",
     human_input_mode="NEVER",
-    max_consecutive_auto_reply=1,
-    is_termination_msg=lambda x: x.get("content", "").strip() == ""
+    max_consecutive_auto_reply=0,
+    is_termination_msg=lambda x: "TERMINATE" in x.get("content", "")
 )
 
 intent_agent = AssistantAgent(
@@ -311,6 +344,7 @@ TERMINATE
 composer_agent = AssistantAgent(
     name="ResponseComposer",
     llm_config=OLLAMA_CONFIG,
+    max_consecutive_auto_reply=1,
     system_message="""
 You are an academic assistant tasked with composing a professional reply email in the name of Prof. Dr. Manuel Fritz, from the Business School Pforzheim.
 Use ONLY the documents and Q&A pairs provided. 
@@ -323,6 +357,7 @@ Tasks:
 5. Maintain academic tone, clarity, and proper grammar.
 6. Ensure the response is structured like a professional email.
 7. ONLY when the context really implies that the sender could need appointment, refer to this Link where appointments can be booked: https://calendly.com/manuelfritz/meeting
+8. Do not use "**" to highlight text. Since the final output will directly go into an email, avoid any markdown formatting.
 
 Input:
 - Original email text
@@ -340,11 +375,12 @@ IMPORTANT: Do NOT include citations, page numbers, or source references in the f
 privacy_agent = AssistantAgent(
     name="PrivacyAgent",
     llm_config=OLLAMA_CONFIG,
+    max_consecutive_auto_reply=1,
     system_message="""
 You are a privacy and GDPR compliance expert.
 Your task is to review an email draft and ensure that:
 
-1. No unnecessary personal data (names, emails, IDs, dates) is included.
+1. No unnecessary personal data (names, emails, IDs, dates) is included, except the professors information within the signature and the Sender's Name when greeting.
 2. Sensitive information is anonymized or removed.
 3. The message remains professional, coherent, and grammatically correct.
 4. The content does not inadvertently disclose private or sensitive data.
@@ -364,34 +400,56 @@ def run_email_pipeline(email_text: str) -> Dict[str, Any]:
     # 1. Intent analysis
     logger.info("=== Step 1: Intent Analysis ===")
     intent_result = user_proxy.initiate_chat(
-        intent_agent,
-        message=email_text,
-        clear_history=True
-    )
-    
-    # Extract JSON from first valid response in chat history
+    intent_agent,
+    message=email_text,
+    clear_history=True
+)
+
+    if not is_terminated(intent_result, accept_json=True):
+        raise RuntimeError("IntentAnalyst did not terminate or return valid JSON")
+
+
     try:
-        intent_data = extract_json_from_chat_history(intent_result.chat_history, "IntentAnalyst", is_array=False)
+        intent_data = extract_json_from_chat_history(
+            intent_result.chat_history,
+            "IntentAnalyst",
+            is_array=False
+        )
     except (ValueError, json.JSONDecodeError) as e:
         logger.error(f"Failed to parse intent JSON: {e}")
         raise
+
 
     logger.info(f"Intent analysis: {intent_data}")
 
     # 2. Question generation
     logger.info("=== Step 2: Question Generation ===")
-    questions_result = user_proxy.initiate_chat(
-        question_agent,
-        message=json.dumps(intent_data["required_information"]),
-        clear_history=True
-    )
-    
-    # Extract JSON from first valid response in chat history
-    try:
-        questions = extract_json_from_chat_history(questions_result.chat_history, "QuestionEngineer", is_array=True)
-    except (ValueError, json.JSONDecodeError) as e:
-        logger.error(f"Failed to parse questions JSON: {e}")
-        raise
+    questions = []
+
+    # Only generate questions if there is required information
+    required_info = intent_data.get("required_information") or []
+    if len(required_info) > 0:
+        questions_result = user_proxy.initiate_chat(
+            question_agent,
+            message=json.dumps(required_info),
+            clear_history=True
+        )
+
+        if not is_terminated(questions_result, accept_json=True):
+            raise RuntimeError("QuestionEngineer did not terminate or return valid JSON")
+
+        try:
+            questions = extract_json_from_chat_history(
+                questions_result.chat_history,
+                "QuestionEngineer",
+                is_array=True
+            )
+        except (ValueError, json.JSONDecodeError) as e:
+            logger.error(f"Failed to parse questions JSON: {e}")
+            logger.warning("Falling back to empty questions list")
+            questions = []
+    else:
+        logger.info("No required information identified, skipping question generation")
 
     logger.info(f"Generated {len(questions)} questions")
 
@@ -453,6 +511,9 @@ Draft a professional reply using ONLY the information from the SOURCE DOCUMENTS 
 """,
         clear_history=True
     )
+    if not is_terminated(draft_result):
+        raise RuntimeError("ResponseComposer did not TERMINATE")
+
     draft = draft_result.chat_history[-1]["content"]
     draft = draft.replace("TERMINATE", "").strip()
     logger.info(f"Draft email: {draft[:200]}...")
@@ -460,12 +521,17 @@ Draft a professional reply using ONLY the information from the SOURCE DOCUMENTS 
     # 5. Privacy check
     logger.info("=== Step 5: Privacy Review ===")
     privacy_result = user_proxy.initiate_chat(
-        privacy_agent,
-        message=draft,
-        clear_history=True
-    )
+    privacy_agent,
+    message=draft,
+    clear_history=True
+)
+
+    if not is_terminated(privacy_result):
+        raise RuntimeError("PrivacyAgent did not TERMINATE")
+
     final_email = privacy_result.chat_history[-1]["content"]
     final_email = final_email.replace("TERMINATE", "").strip()
+
     logger.info(f"Final email: {final_email}")
 
     return {
@@ -537,21 +603,45 @@ class EmailResponse(BaseModel):
 # -------------------------------------------------
 @app.post("/process-email", response_model=EmailResponse)
 async def process_email(payload: EmailRequest):
+    log_buffer = io.StringIO()
+    buffer_handler = logging.StreamHandler(log_buffer)
+    buffer_handler.setLevel(logging.INFO)
+    buffer_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+    logger.addHandler(buffer_handler)
+    log_file_path: Optional[Path] = None
+
     try:
-        logger.info(f"Received payload: {payload.model_dump()}")
+        payload_dict = payload.model_dump()
+        logger.info(f"Received payload: {payload_dict}")
+
+        # Deduplicate identical requests within a short window to avoid double drafts
+        fingerprint = hashlib.sha256(
+            json.dumps(payload_dict, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        now = time.time()
+
+        # Prune expired cache entries
+        expired_keys = [k for k, v in REQUEST_CACHE.items() if now - v["ts"] > DEDUP_TTL_SECONDS]
+        for k in expired_keys:
+            REQUEST_CACHE.pop(k, None)
+
+        cached = REQUEST_CACHE.get(fingerprint)
+        if cached and now - cached["ts"] <= DEDUP_TTL_SECONDS:
+            logger.info("Duplicate payload detected; returning cached response")
+            return cached["response"]
         
         full_email_text = f"""
-Subject: {payload.email_subject}
-From: {payload.email_sender}
-Date: {payload.email_date}
+    Subject: {payload.email_subject}
+    From: {payload.email_sender}
+    Date: {payload.email_date}
 
-Email Body:
-{payload.email_body}
+    Email Body:
+    {payload.email_body}
 
-----------------------------------------
-Attachments / Additional Content:
-{payload.email_attachment}
-""".strip()
+    ----------------------------------------
+    Attachments / Additional Content:
+    {payload.email_attachment}
+    """.strip()
 
         if payload.evaluate_with_trulens:
             result = await asyncio.to_thread(
@@ -566,4 +656,57 @@ Attachments / Additional Content:
 
         # Parse final email to extract subject and body
         final_email = result["final_email"]
-        lines = final_e
+        lines = final_email.split("\n")
+        
+        subject = ""
+        body_start_idx = 0
+        
+        # Look for Betreff: or Subject: line
+        for i, line in enumerate(lines):
+            lower_line = line.lower().strip()
+            if lower_line.startswith("betreff:"):
+                subject = line[line.lower().index("betreff:") + 8:].strip()
+                body_start_idx = i + 1
+                break
+            elif lower_line.startswith("subject:"):
+                subject = line[line.lower().index("subject:") + 8:].strip()
+                body_start_idx = i + 1
+                break
+        
+        # If no subject line found, use first non-empty line
+        if not subject:
+            for i, line in enumerate(lines):
+                if line.strip():
+                    subject = line.strip()
+                    body_start_idx = i + 1
+                    break
+        
+        # Everything after subject line is body, skip empty lines at start
+        body_lines = lines[body_start_idx:]
+        while body_lines and not body_lines[0].strip():
+            body_lines.pop(0)
+        body = "\n".join(body_lines).strip()
+        
+        # Extract sender email from "Name <email@example.com>" format
+        sender_email = payload.email_sender
+        if "<" in sender_email and ">" in sender_email:
+            sender_email = sender_email[sender_email.index("<") + 1:sender_email.index(">")]
+        
+        response_payload = {"subject": subject, "body": body, "sender_email": sender_email}
+        REQUEST_CACHE[fingerprint] = {"ts": now, "response": response_payload}
+
+        log_file_path = export_request_logs(log_buffer.getvalue())
+        logger.info(f"Request log exported to {log_file_path}")
+
+        return response_payload
+
+    except Exception as e:
+        logger.exception("Processing failed")
+        if log_buffer.tell() > 0:
+            log_file_path = export_request_logs(log_buffer.getvalue())
+            logger.error(f"Request log exported to {log_file_path} after error")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        logger.removeHandler(buffer_handler)
+        log_buffer.close()
+
