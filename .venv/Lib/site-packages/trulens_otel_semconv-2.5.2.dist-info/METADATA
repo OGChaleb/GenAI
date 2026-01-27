@@ -1,0 +1,27 @@
+Metadata-Version: 2.1
+Name: trulens-otel-semconv
+Version: 2.5.2
+Summary: Semantic conventions for spans produced by TruLens.
+Home-page: https://trulens.org/
+License: MIT
+Author: Snowflake Inc.
+Author-email: ml-observability-wg-dl@snowflake.com
+Requires-Python: >=3.9,<4.0
+Classifier: Development Status :: 3 - Alpha
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Requires-Dist: opentelemetry-semantic-conventions (>=0.36b0)
+Project-URL: Documentation, https://trulens.org/getting_started/
+Project-URL: Repository, https://github.com/truera/trulens
+Description-Content-Type: text/markdown
+
+# Semantic Conventions for TruLens Spans
+
+This package describes the conventions for attribute names and some attribute values present in spans produced or interpreted by TruLens.
+

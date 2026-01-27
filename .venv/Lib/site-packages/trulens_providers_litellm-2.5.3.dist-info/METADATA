@@ -1,0 +1,26 @@
+Metadata-Version: 2.1
+Name: trulens-providers-litellm
+Version: 2.5.3
+Summary: Library to systematically track and evaluate LLM based applications.
+Home-page: https://trulens.org/
+License: MIT
+Author: Snowflake Inc.
+Author-email: ml-observability-wg-dl@snowflake.com
+Requires-Python: >=3.9,<4.0
+Classifier: Development Status :: 3 - Alpha
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Requires-Dist: litellm (>=1.25,<2.0)
+Requires-Dist: trulens-core (>=2.0.0,<3.0.0)
+Requires-Dist: trulens-feedback (>=2.0.0,<3.0.0)
+Project-URL: Documentation, https://trulens.org/getting_started/
+Project-URL: Repository, https://github.com/truera/trulens
+Description-Content-Type: text/markdown
+
+# trulens-providers-litellm
+

@@ -1,0 +1,43 @@
+Metadata-Version: 2.1
+Name: trulens-core
+Version: 2.5.2
+Summary: Library to systematically track and evaluate LLM based applications.
+Home-page: https://trulens.org/
+License: MIT
+Author: Snowflake Inc.
+Author-email: ml-observability-wg-dl@snowflake.com
+Requires-Python: >=3.9,<4.0
+Classifier: Development Status :: 3 - Alpha
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Requires-Dist: alembic (>=1.8.1,<2.0.0)
+Requires-Dist: dill (>=0.3.8,<0.4.0)
+Requires-Dist: importlib-resources (>=6.0,<7.0)
+Requires-Dist: munch (>=2.5.0,<3.0.0)
+Requires-Dist: nest-asyncio (>=1.5,<2.0)
+Requires-Dist: numpy (>=1.23.0)
+Requires-Dist: opentelemetry-api (>=1.23.0)
+Requires-Dist: opentelemetry-proto (>=1.23.0)
+Requires-Dist: opentelemetry-sdk (>=1.23.0)
+Requires-Dist: packaging (>=23.0)
+Requires-Dist: pandas (>=1.0.0)
+Requires-Dist: pydantic (>=2.4.2,<3.0.0)
+Requires-Dist: python-dotenv (>=0.21,<2.0)
+Requires-Dist: requests (>=2.31,<3.0)
+Requires-Dist: rich (>=13.6.0,<14.0.0)
+Requires-Dist: sqlalchemy (>=2.0,<3.0)
+Requires-Dist: trulens-otel-semconv (>=2.0.0,<3.0.0)
+Requires-Dist: typing_extensions (>=4.9,<5.0)
+Requires-Dist: wrapt (>=1.17.0)
+Project-URL: Documentation, https://trulens.org/getting_started/
+Project-URL: Repository, https://github.com/truera/trulens
+Description-Content-Type: text/markdown
+
+# trulens-core
+
