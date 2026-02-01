@@ -1,0 +1,279 @@
+{
+  "name": "GenAI",
+  "nodes": [
+    {
+      "parameters": {
+        "mailbox": "Inbox",
+        "downloadAttachments": true,
+        "dataPropertyAttachmentsPrefixName": "attachment",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2.1,
+      "position": [
+        -256,
+        -48
+      ],
+      "id": "a3839c87-1f44-406c-b82b-599e260c85ce",
+      "name": "Email Trigger (IMAP)",
+      "credentials": {
+        "imap": {
+          "id": "DSiijiHS30aOc64r",
+          "name": "IMAP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "attachment0",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        416,
+        96
+      ],
+      "id": "8654684b-f831-49e0-a1a4-91cd2d19594a",
+      "name": "Extract from File",
+      "alwaysOutputData": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        656,
+        -32
+      ],
+      "id": "c0ca99f0-6304-4f65-b64d-a2f6d7924529",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/process-email",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"email_subject\": \"{{ $json.subject }}\",\n  \"email_body\": {{ JSON.stringify($json.textPlain) }},\n  \"email_sender\": \"{{ $json.from }}\",\n  \"email_date\": \"{{ $json.date }}\",\n  \"email_attachment\": {{ $json.text ? JSON.stringify($json.text) : null }},\n  \"evaluate_with_trulens\": true\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        992,
+        -32
+      ],
+      "id": "3c24dc96-147e-4484-ab69-9422dad6c519",
+      "name": "HTTP Request2"
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "subject": "={{ $json.subject }}",
+        "bodyContent": "={{ $json.body }}",
+        "additionalFields": {
+          "toRecipients": "={{ $json.sender_email }}"
+        }
+      },
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        -32
+      ],
+      "id": "5e9b79a0-597f-4864-b715-99ae779267fa",
+      "name": "Create a draft",
+      "webhookId": "2d63c0af-43fc-49db-b346-023c5258fcf4",
+      "executeOnce": true,
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "tZ9aDbn6fPq1YTAo",
+          "name": "Microsoft Outlook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/process-email",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"email_subject\": \"{{ $json.subject }}\",\n  \"email_body\": {{ JSON.stringify($json.textPlain) }},\n  \"email_sender\": \"{{ $json.from }}\",\n  \"email_date\": \"{{ $json.date }}\",\n  \"evaluate_with_trulens\": true\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        992,
+        176
+      ],
+      "id": "bbaa8f43-ec53-4d58-b7f6-5a4972c6c18f",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "subject": "={{ $json.subject }}",
+        "bodyContent": "={{ $json.body }}",
+        "additionalFields": {
+          "toRecipients": "={{ $json.sender_email }}"
+        }
+      },
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        176
+      ],
+      "id": "9b286c66-c391-4578-9354-6b3af90f216a",
+      "name": "Create a draft1",
+      "webhookId": "2d63c0af-43fc-49db-b346-023c5258fcf4",
+      "executeOnce": true,
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "tZ9aDbn6fPq1YTAo",
+          "name": "Microsoft Outlook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "298fd070-a26f-4759-8f6d-e583814511b2",
+              "leftValue": "={{ $binary && Object.keys($binary).length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        176,
+        256
+      ],
+      "id": "ef49b7f6-7119-47e1-8cf4-5ea993212987",
+      "name": "If"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Email Trigger (IMAP)": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        []
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request2": {
+      "main": [
+        [
+          {
+            "node": "Create a draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a draft": {
+      "main": [
+        []
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Create a draft1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "5e0758c8-8696-44ca-9ffd-db5b5a285693",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "881fc0786c8ba1973622fa12536c32996db7e8ee98f2c4958baecbee0340e948"
+  },
+  "id": "O8hnwRx4HIFpbXjb",
+  "tags": []
+}
