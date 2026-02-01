@@ -21,7 +21,7 @@ try {
 
 # Step 2: Navigate to project directory
 # Assume the script is run from the project root (GenAI-main)
-Set-Location -Path "GenAI-main"
+#Set-Location -Path "GenAI-main"
 
 # Step 3: Create virtual environment
 Write-Host "Creating virtual environment..."
